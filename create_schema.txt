@@ -1,0 +1,124 @@
+
+
+
+DROP TABLE IF EXISTS offerings;
+DROP TABLE IF EXISTS prerequisites;
+DROP TABLE IF EXISTS grades;
+DROP TABLE IF EXISTS student;
+DROP FUNCTION IF EXISTS reach_max_trigger();
+DROP FUNCTION IF EXISTS prerequisite_trigger();
+DROP FUNCTION IF EXISTS mark_trigger();
+
+
+CREATE TABLE student(
+student_id VARCHAR(9) PRIMARY KEY NOT NULL,
+student_name VARCHAR(225) NOT NULL);
+
+
+CREATE TABLE offerings(
+course_code varchar(10) NOT NULL,
+course_name varchar(128) NOT NULL,
+term_code int NOT NULL,
+instructor varchar(225) NOT NULL,
+max_cap int NOT NULL,
+check (max_cap>0),
+constraint pk PRIMARY KEY (course_code,term_code)
+);
+
+CREATE TABLE prerequisites(
+course_code varchar(10) NOT NULL,
+term_code int NOT NULL,
+prerequisite varchar(10)NOT NULL,
+constraint prerequisites_pk PRIMARY KEY (course_code,term_code,prerequisite)
+);
+
+
+CREATE TABLE grades(
+student_id varchar(9) REFERENCES student(student_id),
+course_code varchar(10),
+term_code int ,
+grade int,
+check(grade>=0 and grade <=100),
+constraint grade_pk PRIMARY KEY (student_id,course_code,term_code)
+);
+
+
+
+create function reach_max_trigger()
+returns trigger as
+$BODY$
+begin
+if (select count(course_code) from grades where course_code=new.course_code and term_code=new.term_code) >(select max_cap from offerings where course_code=new.course_code and term_code=new.term_code)as
+max
+then
+        raise exception 'class is full.';
+end if;
+return new;
+end
+$BODY$
+language plpgsql;
+
+
+create constraint trigger reach_max_constraint
+        after insert or update on grades
+        deferrable
+        for each row
+        execute procedure reach_max_trigger();
+
+
+
+
+create function prerequisite_trigger()
+returns trigger as
+$BODY$
+begin
+if (select count(*) from grades natural join (select prerequisite as course_code from prerequisites where course_code=new.course_code and term_code=new.term_code)as tb where status='STAY' and student_id =new.student_id and grade>=0 and grade<50)>0  
+then
+        raise exception 'prerequisite issue';
+end if;
+return new;
+end
+$BODY$
+language plpgsql;
+
+
+create constraint trigger prerequisite_constraint
+        after insert or update on grades
+        deferrable
+        for each row
+        execute procedure prerequisite_trigger();
+
+
+create function mark_trigger()
+returns trigger as
+$BODY$
+begin
+if (select grade from grades where student_id=new.student_id and course_code=new.course_code and term_code=new.term_code)>=0
+then    
+        raise exception 'mark returned, cannot drop';
+end if;
+return new;
+end
+$BODY$
+language plpgsql;
+
+
+
+create constraint trigger mark_constraint
+        after insert or update on grades
+        deferrable
+        for each row
+        execute procedure mark_trigger();
+
+create function add_name_trigger()
+returns trigger as
+$BODY$
+begin
+if (select grade from grades where student_id=new.student_id and course_code=new.course_code and term_code=new.term_code)>=0
+then
+        raise exception 'mark returned, cannot drop';
+end if;
+return new;
+end
+$BODY$
+language plpgsql;
